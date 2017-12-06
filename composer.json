@@ -1,0 +1,9 @@
+{
+    "name": "avtomon/FormBuilder.js",
+    "description": "jQuery form builder",
+    "type": "project",
+    "minimum-stability": "stable",
+    "config": {
+	      "process-timeout": 1800
+    }
+}
