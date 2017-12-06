@@ -1,5 +1,5 @@
 {
-    "name": "avtomon/FormBuilder.js",
+    "name": "avtomon/FormBuilder",
     "description": "jQuery form builder",
     "type": "project",
     "minimum-stability": "stable",
