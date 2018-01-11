@@ -8,6 +8,6 @@
     },
     "require": {
         "bower-asset/deep-diff": "dev-master",
-	"bower-asset/jquery": "dev-master"
+	    "bower-asset/jquery": "dev-master"
     }
 }
