@@ -8,7 +8,11 @@ function FormBuilder(formConf)
 {
     let self = this;
 
-    if (!$.isPlainObject(formConf.form) || !formConf.form.action) {
+    if (!$.isPlainObject(formConf.form)) {
+        throw new Error('Не задана конфигурация формы');
+    }
+
+    if (!formConf.form.action) {
         throw new Error('Не задан урл для отправки формы');
     }
 
@@ -35,12 +39,17 @@ function FormBuilder(formConf)
         self.parseSections(formConf.sections);
     } else if ($.isArray(formConf.fields)) {
         self.parseFields(this.form, formConf.fields)
+        if ($.isArray(formConf.buttons)) {
+            self.parseButtons(this.form, formConf.buttons)
+        }
     }
 
-    if ($.isArray(formConf.buttons)) {
-        self.parseButtons(this.form, formConf.buttons)
+    if (formConf.stopImageClass) {
+        self.stopImageClass = formConf.stopImageClass;
     }
 }
+
+FormBuilder.prototype.stopImageClass = 'no-image';
 
 /**
  * Добавить кнопки, заданные в конфигурации к форме
@@ -101,52 +110,72 @@ FormBuilder.prototype.parseSections = function (sections)
  */
 FormBuilder.prototype.parseFields = function (section, fields)
 {
-    let self = this;
+    let self = this,
+        fieldEl;
 
     fields.forEach(function (field) {
         if (!field.name || !field.type) {
             return;
         }
 
-        let fieldWrapper = $('<div>', field.fieldWrapper).appendTo(self.form),
-            label = $(
+        if (field.fieldWrapper)
+        {
+            let fieldWrapper = $('<div>', field.fieldWrapper).appendTo(self.form);
+        } else {
+            let fieldWrapper = section;
+        }
+
+        if (self.formConf.templatePath && field.template) {
+            let path = self.formConf.templatePath + field.template;
+            if (self.formConf.templateServerPart) {
+                path.replace(self.formConf.templateServerPart, '')
+            }
+
+            $.get(path, function (template) {
+                fieldEl = template;
+                fieldEl.find('label').text(field.html || field.text);
+                fieldEl.find('input, select, textarea').attr('class', field.class);
+            });
+        } else {
+            let label = $(
                 '<label>',
                 {
                     text: field.html || field.text || field.name,
                     for: field.id || field.name
                 }).appendTo(fieldWrapper),
-            fieldEl;
+                fieldEl;
 
-        delete field.title;
+            delete field.title;
 
-        switch (field.type) {
-            case 'select':
-                delete field.type;
-                fieldEl = $(
-                    '<select>',
-                    field
-                );
-                if ($.isArray(field.options)) {
-                    field.options.forEach( function (option) {
-                        $(
-                            '<option>',
-                            option
-                        ).appendTo(fieldEl);
-                    });
-                }
-                break;
-            case 'textarea':
-                delete field.type;
-                fieldEl = $(
-                    '<textarea>',
-                    field
-                );
-                break;
-            default:
-                fieldEl = $(
-                    '<input>',
-                    field
-                );
+            switch (field.type) {
+                case 'select':
+                    delete field.type;
+                    fieldEl = $(
+                        '<select>',
+                        field
+                    );
+                    if ($.isArray(field.options)) {
+                        field.options.forEach( function (option) {
+                            $(
+                                '<option>',
+                                option
+                            ).appendTo(fieldEl);
+                        });
+                    }
+                    break;
+                case 'textarea':
+                    delete field.type;
+                    fieldEl = $(
+                        '<textarea>',
+                        field
+                    );
+                    break;
+                default:
+                    fieldEl = $(
+                        '<input>',
+                        field
+                    );
+            }
         }
 
         if (self.formConf.labelAfter)
@@ -173,9 +202,120 @@ FormBuilder.prototype.setFormValues = function (valuesObject)
     }
 
     $.each(valuesObject, function (name, value) {
-        self.form.find('*[name=' + name + ']').val(value);
+        this.setInputValue(name, value);
+        this.setImageValue(name, value);
     })
 };
+
+/**
+ * Вставка значения элемента формы
+ *
+ * @param {string} name - имя элемента формы
+ * @param value - значение
+ *
+ * @returns {JQuery<TElement extends Node> | * | jQuery | HTMLElement}
+ */
+FormBuilder.prototype.setInputValue = function (name, value)
+{
+    let self = this,
+        element = this.form.find("[name=" + name + "]")
+    if (!element) {
+        return;
+    }
+
+    if (!this.selectTextFieldName || !this.selectValueFieldName) {
+        throw new Error('В конфигурации не заданы имена полей для получения значений и тектов выпадающего списка');
+    }
+
+    if ($.isArray(value) && element.is('select')) {
+        this.setSelectOptions(element, value, value);
+    } else {
+        element.val(value);
+    }
+
+    return element;
+}
+
+/**
+ * Вставка изображений
+ *
+ * @param {string} name - имя элемента для отображения картинки
+ * @param value - изображение или массив изображений
+ *
+ * @returns {JQuery<TElement extends Node> | * | jQuery | HTMLElement}
+ */
+FormBuilder.prototype.setImageValue = function (name, value)
+{
+    let element = this.form.find("img[data-view=" + name + "]");
+    if (!element.length) {
+        return;
+    }
+
+    if (!$.isArray(value)) {
+        value = [value];
+    }
+
+    element.removeClass(this.stopImageClass);
+    let lastIndex = count(value) - 1;
+    value.forEach(function (imgSrc, index) {
+        element
+            .attr('src', imgSrc)
+            .after(
+                $('<input>')
+                    .attr('type', 'hidden')
+                    .attr('name', name)
+                    .val(imgSrc)
+            );
+
+        if (index < lastIndex) {
+            let newElement = element.clone(true);
+            element.after(newElement);
+            element = newElement;
+        }
+    });
+
+    return element;
+}
+
+/**
+ * Добавить опции для выпадающего списка
+ *
+ * @param {string|jQuery} select - элемент списка или имя обрабатываемого списка
+ * @param {array} options - массив данных об опциях
+ * @param {bool} addEmpty - добвалять ли в начало пустой элемент
+ *
+ * @returns {JQuery<TElement extends Node> | * | jQuery | HTMLElement}
+ */
+FormBuilder.prototype.setSelectOptions = function (select, options, addEmpty = true)
+{
+    if (select instanceof 'String') {
+        select = this.form.find("[name=$select]");
+        if (!select.length) {
+            return;
+        }
+    }
+
+    if (!options[0]) {
+        return;
+    }
+
+    if (addEmpty) {
+        var emptyOption = Object.assign({}, options[0]);
+        emptyOption.value = null;
+        emptyOption.text = emptyOption.html = '';
+        options.unshift(emptyOption);
+    }
+
+    options.forEach(function (option) {
+        if (!option.text && !option.html) {
+            option.text = option.value;
+        }
+
+        $('<option>', option).appendTo(select)
+    });
+
+    return select;
+}
 
 /**
  * Установить параметр action формы
