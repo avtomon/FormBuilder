@@ -223,11 +223,11 @@ FormBuilder.prototype.setInputValue = function (name, value)
         return;
     }
 
-    if (!this.selectTextFieldName || !this.selectValueFieldName) {
-        throw new Error('В конфигурации не заданы имена полей для получения значений и тектов выпадающего списка');
-    }
-
     if ($.isArray(value) && element.is('select')) {
+        if (!this.selectTextFieldName || !this.selectValueFieldName) {
+            throw new Error('В конфигурации не заданы имена полей для получения значений и текcтов выпадающего списка');
+        }
+
         this.setSelectOptions(element, value, value);
     } else {
         element.val(value);
